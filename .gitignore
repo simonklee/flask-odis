@@ -1,4 +1,6 @@
 ve/
 setup.sh
+req.txt
+.coverage
 *.pyc
 *.egg-info
