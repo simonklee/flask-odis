@@ -1,0 +1,4 @@
+ve/
+setup.sh
+*.pyc
+*.egg-info

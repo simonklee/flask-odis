@@ -1,0 +1,10 @@
+ipdb
+ipython
+nose
+coverage
+
+#git+git://github.com/simonz05/odis.git
+git+https://simonz05@bitbucket.org/simonz05/flask.git
+git+https://simonz05@bitbucket.org/simonz05/redis-py.git
+#hg+https://simonz05@bitbucket.org/simonz05/flask-wtf
+hg+https://simonz05@bitbucket.org/simonz05/wtforms
