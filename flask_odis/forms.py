@@ -87,10 +87,8 @@ class ModelForm(forms.Form):
         self._obj = kwargs.get('obj' or None)
 
     def validate(self, *args, **kwargs):
-        ok = super(ModelForm, self).validate(*args, **kwargs)
-
-        if not ok:
-            return ok
+        if not super(ModelForm, self).validate(*args, **kwargs):
+            return False
 
         if not self._obj:
             self._obj = self._meta.model()
