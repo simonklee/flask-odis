@@ -4,6 +4,7 @@ import odis
 
 from flask.ext.wtf import forms, fields, validators
 from wtforms.form import FormMeta
+from odis.utils import s
 
 translate = {
     'field': fields.StringField,
@@ -32,7 +33,7 @@ def formfield_from_modelfield(field):
     if default != odis.EMPTY:
         data['default'] = default
 
-    data['label'] = field.name
+    data['label'] = field.verbose_name or field.name
 
     if 'choices' in data:
         form_field = fields.SelectField
@@ -58,6 +59,9 @@ def fields_for_model(model, fields=None, exclude=None):
         if exclude and name in exclude:
             continue
 
+        if name in ('pk',):
+            continue
+
         field_dict[name] = formfield_from_modelfield(f)
 
     return field_dict
@@ -77,3 +81,29 @@ class ModelFormMeta(FormMeta):
 
 class ModelForm(forms.Form):
     __metaclass__ = ModelFormMeta
+
+    def __init__(self, *args, **kwargs):
+        super(ModelForm, self).__init__(*args, **kwargs)
+        self._obj = kwargs.get('obj' or None)
+
+    def validate(self, *args, **kwargs):
+        ok = super(ModelForm, self).validate(*args, **kwargs)
+
+        if not ok:
+            return ok
+
+        if not self._obj:
+            self._obj = self._meta.model()
+
+        self._obj = self._obj.from_dict(self.data, to_python=True)
+        ok = self._obj.is_valid()
+        self._errors = self._obj._errors
+        #TODO: add errors to each form field
+        return ok
+
+    def save(self):
+        if self.errors:
+            raise ValueError("Could not save because form didn't validate")
+
+        self._obj.save()
+        return self._obj
