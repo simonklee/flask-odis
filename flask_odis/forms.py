@@ -13,7 +13,9 @@ translate = {
     'foreignfield': fields.IntegerField,
     'datetimefield': fields.DateTimeField,
     'datefield': fields.DateField,
-    'relfield': fields.IntegerField
+    'setfield': fields.StringField,
+    'sortedsetfield': fields.StringField,
+    'relfield': fields.StringField,
 }
 
 def formfield_from_modelfield(field):
@@ -21,38 +23,37 @@ def formfield_from_modelfield(field):
         'validators': []
     }
 
-    if getattr(field, 'default' or False):
+    default = getattr(field, 'default', odis.EMPTY)
+
+    if default != odis.EMPTY or getattr(field, 'nil', False) == True:
         data['validators'].append(validators.optional())
     else:
         data['validators'].append(validators.required())
 
-    if getattr(field, 'choices' or False):
-        data['choices'] = field.choices
-
-    default = getattr(field, 'default' or None)
     if default != odis.EMPTY:
         data['default'] = default
 
+    if getattr(field, 'choices', False):
+        data['choices'] = field.choices
+
     data['label'] = field.verbose_name or field.name
+
+    field_type = field.__class__.__name__.lower()
 
     if 'choices' in data:
         form_field = fields.SelectField
         data['coerce'] = field.to_python
     else:
-        form_field = translate[field.__class__.__name__.lower()]
+        form_field = translate[field_type]
 
+    if field_type in ('setfield', 'sortedsetfield', 'relfield'):
+        return fields.FieldList(form_field(**data))
     return form_field(**data)
-
-class ModelFormOptions(object):
-    def __init__(self, options=None):
-        self.model = getattr(options, 'model', None)
-        self.fields = getattr(options, 'fields', None)
-        self.exclude = getattr(options, 'exclude', None)
 
 def fields_for_model(model, fields=None, exclude=None):
     field_dict = {}
 
-    for name, f in model._fields.items():
+    for name, f in dict(model._fields, **model._coll_fields).items():
         if fields and not name in fields:
             continue
 
@@ -63,8 +64,13 @@ def fields_for_model(model, fields=None, exclude=None):
             continue
 
         field_dict[name] = formfield_from_modelfield(f)
-
     return field_dict
+
+class ModelFormOptions(object):
+    def __init__(self, options=None):
+        self.model = getattr(options, 'model', None)
+        self.fields = getattr(options, 'fields', None)
+        self.exclude = getattr(options, 'exclude', None)
 
 class ModelFormMeta(FormMeta):
     def __new__(cls, name, bases, attrs):
@@ -93,11 +99,22 @@ class ModelForm(forms.Form):
         if not self._obj:
             self._obj = self._meta.model()
 
-        self._obj = self._obj.from_dict(self.data, to_python=True)
+        self.populate_obj(self._obj)
         ok = self._obj.is_valid()
         self._errors = self._obj._errors
-        #TODO: add errors to each form field
+
+        for k, v in self._errors.items():
+            if k in self._fields:
+                s()
+                self._fields[k].errors = (v,)
+            else:
+                # todo, add to __all__
+                pass
+
         return ok
+
+    def populate_obj(self, obj):
+        super(ModelForm, self).populate_obj(obj)
 
     def save(self):
         if self.errors:
