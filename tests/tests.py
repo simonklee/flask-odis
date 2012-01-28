@@ -7,6 +7,7 @@ from werkzeug.test import EnvironBuilder
 
 from flask.ext.odis import odis, ModelForm
 from flask.ext.wtf import Form, fields, validators
+from odis.utils import s
 
 class Foo(odis.Model):
     username = odis.CharField()
@@ -73,9 +74,12 @@ class ModelFormTestCase(unittest.TestCase):
             self.assertEqual(bb.validate(), False)
 
     def test_fieldlist(self):
-        req = create_request(data={'users-0':['a'], 'users-1': ['b']})
+        req = create_request(data={'users':['a', 'b']})
         f = BazForm(req.form, csrf_enabled=False)
         self.assertEqual(hasattr(f, 'users'), True)
-        self.assertEqual(f.validate(), True)
-        self.assertEqual(len(f.users.entries), 2)
-        # q.sets.sadd(*[u.pk for u in self.users[:2]])
+        self.assertEqual(f.validate(), False)
+        obj = Baz()
+        obj.save()
+
+        f = BazForm(obj=obj)
+        s()
