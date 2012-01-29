@@ -1,100 +1,47 @@
 from __future__ import absolute_import
 
 import odis
+import itertools
 
-from cgi import escape
-from flask.ext.wtf import forms, fields, validators, widgets, ValidationError
+from .widgets import CheckboxSelectMultiple
+from flask.ext.wtf import forms, fields, validators, ValidationError
 from wtforms.form import FormMeta
-from wtforms.widgets import html_params, HTMLString
 from odis.utils import s
 
-class SetSelectField(fields.SelectFieldBase):
-    widget = widgets.Select()
-
-    def __init__(self, label=None, validators=None, queryset=None, nil=False, **kwargs):
-        super(SetSelectField, self).__init__(label, validators, **kwargs)
-        self.nil = nil
-        self._set_data(None)
-
-        if queryset is not None:
-            self.queryset = queryset.all()
-        else:
-            self.queryset = []
-
-        self.get_label = lambda x: x
-
-    def _get_data(self):
-        if self._formdata is not None:
-            for obj in self.queryset:
-                if obj.pk == self._formdata:
-                    self._set_data(obj)
-                    break
-        return self._data
-
-    def _set_data(self, data):
-        self._data = data
-        self._formdata = None
-
-    data = property(_get_data, _set_data)
-
-    def iter_choices(self):
-        if self.nil:
-            yield (u'__None', u'', self.data is None)
-
-        for obj in self.queryset:
-            yield (obj.pk, self.get_label(obj), obj == self.data)
-
-    def process_formdata(self, valuelist):
-        if valuelist:
-            if valuelist[0] == '__None':
-                self.data = None
-            else:
-                self._data = None
-                self._formdata = int(valuelist[0])
-
-    def pre_validate(self, form):
-        if not self.nil or self.data is not None:
-            for obj in self.queryset:
-                if self.data == obj:
-                    break
-            else:
-                raise ValidationError(self.gettext('Not a valid choice'))
-
-    def populate_obj(self, obj, name):
-        setattr(obj, '_' + name + '_data', [self.data])
-
-class RelSelectField(SetSelectField):
-    def __init__(self, *args, **kwargs):
-        super(RelSelectField, self).__init__(*args, **kwargs)
-        self.get_label = lambda x: x.pk
-
-    def populate_obj(self, obj, name):
-        setattr(obj, '_' + name + '_data', [self.data.pk])
-
-class CheckboxSelectMultiple(object):
-    'Field must provide `iter_choices()` which yields `(value, label, selected)`.'
-    def __call__(self, field, **kwargs):
-        kwargs.setdefault('type', 'checkbox')
-
-        html = [u'<ul>']
-
-        for i, (val, label, selected) in enumerate(field.iter_choices()):
-            id = u'id_%s_%s' % (field.name, i)
-            options = dict(kwargs, value=val, id=id, name=field.name)
-
-            if selected:
-                options['selected'] = True
-
-            html.append(u'<li><label %s><input %s> %s</label></li>' % (
-                html_params(**{'for': id}),
-                html_params(**options),
-                escape(unicode(label))))
-
-        html.append(u'</ul>')
-
-        return HTMLString(u''.join(html))
-
 class SetMultipleField(fields.SelectMultipleField):
+    '''
+    ## On creating set fields
+
+    Given a model set field on a form class.
+
+        - Before initiating `obj` the set field on the form
+          class cannot be true (unless optional).
+
+        - We cannot extract choices from the set field before we
+          have an `obj`.
+
+        - When initialization a form instance, given `obj`, we
+          can fetch choices from `obj.setfield`.
+
+        - Creating a new instance of `obj` using a ModelForm
+          with a set field which is required is not possible. We
+          need to manually add viable choices when the set field
+          is required and empty.
+
+    ## On updating set fields
+
+    Given a model set field on a form class.
+
+        - Before initiating the form class set field choices
+          cannot be computed.
+
+        - Given `obj` on init we can fetch choices from
+          `obj.setfield`. All choices computed in this way are
+          by definition `selected`.
+
+        - Adding something to the set field is invalid as the
+          new option is not a valid choice.
+    '''
     widget = CheckboxSelectMultiple()
 
     def __init__(self, *args, **kwargs):
@@ -109,6 +56,63 @@ class SetMultipleField(fields.SelectMultipleField):
     def populate_obj(self, obj, name):
        setattr(obj, '_' + name + '_data', self.data)
 
+class SortedSetMultipleField(SetMultipleField):
+    def __init__(self, *args, **kwargs):
+        raise NotImplemented
+
+class RelMultipleField(SetMultipleField):
+    '''
+    ## On creating rel fields.
+
+    Given a rel field on a form class.
+
+        - Creating a new instance of `obj` using a ModelForm
+          with a rel field which is required is possible. One or
+          more choices can be selected from the default choices
+          created.
+
+    ## On updating rel fields.
+
+    Given a rel field on a form class.
+
+        - Before initiating the form class rel field choices
+          can be computed by taking the `model.relfield.model`
+          and using its default queryset as choices.
+
+        - Default choices are by definition not selected.
+
+        - Given `obj` on init we can find selected choices by
+          comparing default choices and `obj.relfield`
+    '''
+
+    def __init__(self, queryset, *args, **kwargs):
+        kwargs.setdefault('coerce', int)
+        super(RelMultipleField, self).__init__(*args, **kwargs)
+        self.queryset = queryset.all()
+
+    def iter_choices(self):
+        print 'itererate', self.data
+        for obj in self.queryset:
+            selected = self.data is not None and self.coerce(obj.pk) in self.data
+            yield (obj.pk, obj, selected)
+
+    def process_data(self, value):
+        print 'init', value
+        values = itertools.imap(lambda o: o.pk, value)
+        super(RelMultipleField, self).process_data(values)
+
+    def process_formdata(self, valuelist):
+        super(RelMultipleField, self).process_formdata(valuelist)
+        print 'POST data', self.data
+
+    def pre_validate(self, form):
+        if self.data:
+            values = frozenset(o.pk for o in self.queryset)
+            print 'validate', self.data, values
+            for d in self.data:
+                if d not in values:
+                    raise ValidationError(self.gettext('`%s` not a valid choice' % d))
+
 fields_table = {
     'field': fields.StringField,
     'charfield': fields.StringField,
@@ -117,8 +121,8 @@ fields_table = {
     'datetimefield': fields.DateTimeField,
     'datefield': fields.DateField,
     'setfield': SetMultipleField,
-    'sortedsetfield': fields.SelectMultipleField,
-    'relfield': fields.SelectMultipleField,
+    'sortedsetfield': SortedSetMultipleField,
+    'relfield': RelMultipleField,
 }
 
 def is_coll_field(f):
@@ -132,11 +136,13 @@ def formfield_from_modelfield(field):
 
     default = getattr(field, 'default', odis.EMPTY)
 
-    if default != odis.EMPTY or getattr(field, 'nil', False):
-        opts['validators'].append(validators.optional())
+    if field_type == 'relfield':
+        opts['queryset'] = field.model.obj
 
-        if is_coll_field(field):
-            opts['nil'] = True
+    if is_coll_field(field):
+        opts['validators'].append(validators.optional())
+    elif default != odis.EMPTY or getattr(field, 'nil', False):
+        opts['validators'].append(validators.optional())
     else:
         opts['validators'].append(validators.required())
 
@@ -268,6 +274,6 @@ class ModelForm(forms.Form):
                     f.add(o)
                     # TODO what about score?
             elif isinstance(f_type, odis.RelField):
-                f.add(*data)
+                f.add(*(f_type.model.obj.get(pk=o) for o in data))
 
         return self._obj
