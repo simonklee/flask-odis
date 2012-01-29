@@ -8,7 +8,7 @@ from setuptools import setup
 
 setup(
     name='Flask-odis',
-    version='0.1.0',
+    version='0.1.1',
     url='http://github.org/simonz05/flask-odis',
     license='BSD',
     author='Simon Klee',

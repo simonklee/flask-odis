@@ -8,6 +8,7 @@ class CheckboxSelectMultiple(object):
 
         html = [u'<ul>']
 
+        print 'calling iter_choices', field.iter_choices()
         for i, (val, label, selected) in enumerate(field.iter_choices()):
             id = u'id_%s_%s' % (field.name, i)
             options = dict(kwargs, value=val, id=id, name=field.name)

@@ -48,7 +48,6 @@ class ModelFormTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.ctx.pop()
-        odis.r.flushdb()
 
     def test_simple(self):
         req = create_request(data={'username': 'foo'})
@@ -133,3 +132,38 @@ class ModelFormTestCase(unittest.TestCase):
 
         # Any Foo pk is a valid choice
         self.assertEqual(f.validate(), True)
+
+        print '\n  quxform #3:\n'
+        req = create_request(data={'users':[5]})
+        f = QuxForm(req.form, csrf_enabled=False)
+
+        # `5` is not a Foo pk
+        self.assertEqual(f.validate(), False)
+
+        req = create_request(data={'users':[1, 2]})
+        f = QuxForm(req.form, csrf_enabled=False)
+
+        # 1, 2 should now be added to Bar.users on save()
+        obj = f.save() # create new obj on save
+        self.assertEqual(len(obj.users.all()), 2)
+
+        for pk in (1, 2):
+            self.assertTrue(obj.users.get(pk=pk))
+
+        for pk in (3, 4):
+            self.assertRaises(odis.EmptyError, obj.users.get, pk=pk)
+
+        f = QuxForm(obj=obj, csrf_enabled=False)
+        selected = [selected for pk, o, selected in f.users.iter_choices()]
+        self.assertEqual(selected, [True, True, False, False])
+
+        # Update the object and only select one user. pk 2 should be removed
+        req = create_request(data={'users':[1]})
+        f = QuxForm(req.form, obj=obj, csrf_enabled=False)
+        obj = f.save()
+
+        # test that pk 2 was removed
+        f = QuxForm(obj=obj, csrf_enabled=False)
+        selected = [selected for pk, o, selected in f.users.iter_choices()]
+        self.assertEqual(selected, [True, False, False, False])
+        self.assertRaises(odis.EmptyError, obj.users.get, pk=2)

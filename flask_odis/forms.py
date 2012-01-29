@@ -54,7 +54,7 @@ class SetMultipleField(fields.SelectMultipleField):
             yield (value, label, selected)
 
     def populate_obj(self, obj, name):
-       setattr(obj, '_' + name + '_data', self.data)
+        setattr(obj, '_' + name + '_data', self.data)
 
 class SortedSetMultipleField(SetMultipleField):
     def __init__(self, *args, **kwargs):
@@ -98,8 +98,9 @@ class RelMultipleField(SetMultipleField):
 
     def process_data(self, value):
         print 'init', value
-        values = itertools.imap(lambda o: o.pk, value)
-        super(RelMultipleField, self).process_data(values)
+        if value:
+            values = itertools.imap(lambda o: o.pk, value)
+            super(RelMultipleField, self).process_data(values)
 
     def process_formdata(self, valuelist):
         super(RelMultipleField, self).process_formdata(valuelist)
@@ -274,6 +275,6 @@ class ModelForm(forms.Form):
                     f.add(o)
                     # TODO what about score?
             elif isinstance(f_type, odis.RelField):
-                f.add(*(f_type.model.obj.get(pk=o) for o in data))
+                f.replace(*(f_type.model.obj.get(pk=o) for o in data))
 
         return self._obj
