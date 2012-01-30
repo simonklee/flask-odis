@@ -93,9 +93,11 @@ class RelMultipleField(SetMultipleField):
 
     def process_data(self, value):
         print 'init', value
-        if value:
-            values = itertools.imap(lambda o: o.pk, value)
-            super(RelMultipleField, self).process_data(values)
+        try:
+            it = itertools.imap(lambda o: o.pk, value)
+            self.data = list(self.coerce(v) for v in it)
+        except (ValueError, TypeError):
+            self.data = None
 
     def process_formdata(self, valuelist):
         super(RelMultipleField, self).process_formdata(valuelist)
@@ -108,5 +110,3 @@ class RelMultipleField(SetMultipleField):
             for d in self.data:
                 if d not in values:
                     raise ValidationError(self.gettext('`%s` not a valid choice' % d))
-
-
