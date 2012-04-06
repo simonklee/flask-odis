@@ -2,8 +2,9 @@ from __future__ import absolute_import
 
 import odis
 
-from flask.ext.wtf import forms, fields, validators
+from flask.ext.wtf import Form
 from wtforms.form import FormMeta
+from wtforms import fields, validators
 
 from .fields import (SetMultipleField, SortedSetMultipleField,
         RelMultipleField)
@@ -32,7 +33,7 @@ def formfield_from_modelfield(field):
     default = getattr(field, 'default', odis.EMPTY)
 
     if field_type == 'relfield':
-        opts['queryset'] = field.model.obj
+        opts['queryset'] = field.model.obj.all()
 
     if is_coll_field(field):
         opts['validators'].append(validators.optional())
@@ -101,7 +102,7 @@ class ModelFormMeta(FormMeta):
 
         return new_cls
 
-class ModelForm(forms.Form):
+class ModelForm(Form):
     __metaclass__ = ModelFormMeta
 
     def __init__(self, *args, **kwargs):
@@ -109,11 +110,11 @@ class ModelForm(forms.Form):
         self._obj = kwargs.get('obj' or None)
 
         if self._obj:
-            for k in self._coll_fields():
+            for k in self.coll_fields_iter():
                 query = getattr(self._obj, k, None)
                 field = getattr(self, k)
 
-                if not field.choices:
+                if not getattr(field, 'choices', None):
                     field.choices = ((o, o) for o in query.all())
 
     def validate(self, *args, **kwargs):
@@ -125,7 +126,7 @@ class ModelForm(forms.Form):
 
         self.populate_obj(self._obj)
 
-        ok = self._obj.is_valid()
+        ok = self._obj.is_valid(fields=self.model_fields)
         self._errors = self._obj.errors
 
         for k, v in self._errors.items():
@@ -140,11 +141,13 @@ class ModelForm(forms.Form):
     def populate_obj(self, obj):
         super(ModelForm, self).populate_obj(obj)
 
-    def _coll_fields(self):
+    def coll_fields_iter(self):
         'find all coll_fields for the current form'
-        return filter(lambda k: k in self._obj._coll_fields, self._fields)
+        for k in self.model_fields:
+            if k in self._obj._coll_fields:
+                yield self._fields[k]
 
-    def save(self):
+    def save(self, commit=True):
         if self._errors:
             raise ValueError("Could not save because form didn't validate")
 
@@ -152,12 +155,15 @@ class ModelForm(forms.Form):
             self._obj = self._meta.model()
 
         self.populate_obj(self._obj)
-        self._obj.save()
-        self.save_coll()
+
+        if commit:
+            self._obj.save()
+            self.save_coll()
+
         return self._obj
 
     def save_coll(self):
-        for k in self._coll_fields():
+        for k in self.coll_fields_iter():
             f_type = self._obj._coll_fields.get(k, None)
             f = getattr(self._obj, k, None)
             data = getattr(self._obj, '_' + k + '_data', None)

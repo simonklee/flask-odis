@@ -1,6 +1,6 @@
 import itertools
 
-from flask.ext.wtf import fields, ValidationError
+from wtforms import fields, ValidationError
 from .widgets import CheckboxSelectMultiple
 
 class SetMultipleField(fields.SelectMultipleField):
@@ -83,7 +83,8 @@ class RelMultipleField(SetMultipleField):
     def __init__(self, queryset, *args, **kwargs):
         kwargs.setdefault('coerce', int)
         super(RelMultipleField, self).__init__(*args, **kwargs)
-        self.queryset = queryset.all()
+        print '__init__', list(queryset)
+        self.queryset = queryset
 
     def iter_choices(self):
         print 'itererate', self.data
@@ -106,7 +107,7 @@ class RelMultipleField(SetMultipleField):
     def pre_validate(self, form):
         if self.data:
             values = frozenset(o.pk for o in self.queryset)
-            print 'validate', self.data, values
+            print 'validate', self.data, values, self.choices
             for d in self.data:
                 if d not in values:
                     raise ValidationError(self.gettext('`%s` not a valid choice' % d))

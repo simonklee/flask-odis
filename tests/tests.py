@@ -2,11 +2,13 @@ from __future__ import absolute_import
 
 import unittest
 import flask
+
 from flask import Request
 from werkzeug.test import EnvironBuilder
+from wtforms import validators, fields
 
-from flask.ext.odis import odis, ModelForm
-from flask.ext.wtf import Form, fields, validators
+from flask.ext.odis import odis, ModelForm, RelMultipleField
+from flask.ext.wtf import Form
 from odis.utils import s
 
 class Foo(odis.Model):
@@ -30,6 +32,7 @@ class Qux(odis.Model):
     users = odis.RelField(Foo)
 
 class QuxForm(ModelForm):
+    users = RelMultipleField(queryset=Qux.obj.all())
     class Meta:
         model = Qux
 
@@ -124,14 +127,19 @@ class ModelFormTestCase(unittest.TestCase):
         self.assertEqual(f.validate(), False)
 
         usernames = ['foo', 'bar', 'baz', 'qux']
-        [Foo(username=n).save() for n in usernames]
+        users = [Foo.obj.get(pk=i+1) for i, n in enumerate(usernames) if Foo(username=n).save()]
+        q = Qux()
+        q.save()
+        q.users.add(*users)
 
         print '\n  quxform #2:\n'
         req = create_request(data={'users':[1, 2, 3, 4]})
-        f = QuxForm(req.form, csrf_enabled=False)
+        f = QuxForm(req.form, obj=q, csrf_enabled=False)
 
         # Any Foo pk is a valid choice
-        self.assertEqual(f.validate(), True)
+        f.validate()
+        print f.errors
+        #self.assertEqual(f.validate(), True)
 
         print '\n  quxform #3:\n'
         req = create_request(data={'users':[5]})
@@ -145,6 +153,7 @@ class ModelFormTestCase(unittest.TestCase):
 
         # 1, 2 should now be added to Bar.users on save()
         obj = f.save() # create new obj on save
+        #s()
         self.assertEqual(len(obj.users.all()), 2)
 
         for pk in (1, 2):
